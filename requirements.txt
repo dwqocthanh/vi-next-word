@@ -1,0 +1,10 @@
+torch
+transformers
+sentencepiece
+gradio
+numpy
+pandas
+matplotlib
+tqdm
+pytest
+huggingface_hub

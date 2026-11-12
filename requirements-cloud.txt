@@ -1,0 +1,4 @@
+transformers
+sentencepiece
+gradio
+huggingface_hub
