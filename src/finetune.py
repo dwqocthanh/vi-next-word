@@ -36,6 +36,10 @@ def main():
     dev = get_device()
     tok = AutoTokenizer.from_pretrained(args.model)
     model = AutoModelForCausalLM.from_pretrained(args.model)
+    n_emb = model.get_input_embeddings().num_embeddings
+    if len(tok) > n_emb:
+        print(f"Tokenizer ({len(tok)}) lớn hơn embedding ({n_emb}), mở rộng.")
+        model.resize_token_embeddings(len(tok))
     cfg = model.config
     max_pos = (getattr(cfg, "n_positions", None)
                or getattr(cfg, "max_position_embeddings", 1024))
