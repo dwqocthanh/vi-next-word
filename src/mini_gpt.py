@@ -31,3 +31,62 @@ class CausalSelfAttention(nn.Module):
         w = self.drop(torch.softmax(diem, dim=-1))
         y = (w @ v).transpose(1, 2).contiguous().view(B, T, C)
         return self.proj(y)
+
+class MLP(nn.Module):
+    def __init__(self, d_model, dropout):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(d_model, 4 * d_model),
+            nn.GELU(),
+            nn.Linear(4 * d_model, d_model),
+            nn.Dropout(dropout),
+        )
+ 
+    def forward(self, x):
+        return self.net(x)
+ 
+ 
+class Block(nn.Module):
+    def __init__(self, d_model, n_heads, block_size, dropout):
+        super().__init__()
+        self.ln1 = nn.LayerNorm(d_model)
+        self.att = CausalSelfAttention(d_model, n_heads, block_size, dropout)
+        self.ln2 = nn.LayerNorm(d_model)
+        self.mlp = MLP(d_model, dropout)
+ 
+    def forward(self, x):
+        x = x + self.att(self.ln1(x))      # residual quanh Attention
+        x = x + self.mlp(self.ln2(x))      # residual quanh FFN
+        return x
+ 
+class MiniGPT(nn.Module):
+    def __init__(self, vocab_size, block_size=128, d_model=256, n_heads=4,
+                 n_layers=4, dropout=0.1):
+        super().__init__()
+        self.block_size = block_size
+        self.tok = nn.Embedding(vocab_size, d_model)
+        self.pos = nn.Embedding(block_size, d_model)
+        self.drop = nn.Dropout(dropout)
+        self.blocks = nn.ModuleList(
+            [Block(d_model, n_heads, block_size, dropout)
+             for _ in range(n_layers)])
+        self.ln_f = nn.LayerNorm(d_model)
+        self.head = nn.Linear(d_model, vocab_size, bias=False)
+        self.head.weight = self.tok.weight          # weight tying
+        self.apply(self._init)
+ 
+    @staticmethod
+    def _init(m):
+        if isinstance(m, (nn.Linear, nn.Embedding)):
+            nn.init.normal_(m.weight, mean=0.0, std=0.02)
+        if isinstance(m, nn.Linear) and m.bias is not None:
+            nn.init.zeros_(m.bias)
+ 
+    def forward(self, idx):                         # idx: [B, T] các ID
+        B, T = idx.shape
+        assert T <= self.block_size, "chuỗi dài hơn block_size"
+        pos = torch.arange(T, device=idx.device)
+        x = self.drop(self.tok(idx) + self.pos(pos))
+        for b in self.blocks:
+            x = b(x)
+        return self.head(self.ln_f(x))              # logits [B, T, V]
